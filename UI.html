@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>FileOps — Python File Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:    #0C1117;
+  --s1:    #131B24;
+  --s2:    #18222E;
+  --s3:    #1D2A38;
+  --bdr:   #243040;
+  --bdr2:  #2C3A4A;
+  --txt:   #C9DCF0;
+  --muted: #526880;
+  --dim:   #344A60;
+  --grn:   #2ECC71;
+  --grndim:#0C2418;
+  --blu:   #3B9EFF;
+  --bludim:#081E35;
+  --amb:   #F5A623;
+  --ambdim:#2A1A04;
+  --red:   #E74C3C;
+  --reddim:#220C09;
+  --mono:  'JetBrains Mono',monospace;
+}
+html,body{min-height:100%;background:var(--bg);color:var(--txt);font-family:var(--mono)}
+
+/* scanlines */
+body::after{content:'';position:fixed;inset:0;
+  background:repeating-linear-gradient(0deg,transparent 0,transparent 3px,rgba(0,0,0,.035) 3px,rgba(0,0,0,.035) 4px);
+  pointer-events:none;z-index:9999}
+
+.wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;min-height:100vh}
+
+/* ── TITLEBAR ── */
+.tbar{height:44px;background:var(--s1);border-bottom:1px solid var(--bdr);
+  display:flex;align-items:center;padding:0 18px;gap:10px;position:sticky;top:0;z-index:100}
+.dots{display:flex;gap:6px}
+.dot{width:12px;height:12px;border-radius:50%}
+.dr{background:#FF5F57}.dy{background:#FFBD2E}.dg{background:#28CA41}
+.tbar-path{margin-left:14px;font-size:12px;color:var(--muted)}
+.tbar-path b{color:var(--grn);font-weight:600}
+.tbar-right{margin-left:auto;display:flex;gap:7px}
+.pill{font-size:10px;padding:2px 9px;border-radius:20px;border:1px solid var(--bdr2);color:var(--muted)}
+.pill-live{border-color:var(--grn);color:var(--grn)}
+
+/* ── HERO ── */
+.hero{padding:30px 24px 22px;background:var(--s1);border-bottom:1px solid var(--bdr)}
+.prompt{font-size:11px;color:var(--dim);margin-bottom:10px}
+.prompt .sym{color:var(--grn)}
+.hero-h{font-size:38px;font-weight:700;letter-spacing:-.025em;line-height:1;margin-bottom:10px}
+.hero-h .acc{color:var(--grn)}
+.cur{display:inline-block;width:3px;height:34px;background:var(--grn);margin-left:3px;vertical-align:middle;
+  animation:blink 1.1s step-end infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.hero-sub{font-size:12px;font-weight:300;color:var(--muted);line-height:1.75;max-width:480px}
+
+/* ── STATS ── */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--bdr)}
+.stat{padding:14px 20px;border-right:1px solid var(--bdr)}
+.stat:last-child{border-right:none}
+.sv{font-size:28px;font-weight:700;line-height:1;margin-bottom:3px}
+.sl{font-size:10px;color:var(--muted);font-weight:300}
+.cg{color:var(--grn)}.cb{color:var(--blu)}.ca{color:var(--amb)}.cr{color:var(--red)}
+
+/* ── OP SELECTOR ── */
+.op-row{display:grid;grid-template-columns:repeat(4,1fr);gap:0;
+  border-bottom:1px solid var(--bdr);background:var(--s1)}
+.op-btn{display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding:14px 8px;border:none;border-bottom:2px solid transparent;
+  background:transparent;color:var(--muted);font-family:var(--mono);
+  font-size:11.5px;font-weight:500;cursor:pointer;transition:all .15s}
+.op-btn .ob-icon{font-size:18px;
+  width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  background:var(--s2);transition:background .15s}
+.op-btn:hover{background:var(--s2)}
+.op-btn.ac-c{color:var(--grn);border-bottom-color:var(--grn);background:var(--grndim)}
+.op-btn.ac-r{color:var(--blu);border-bottom-color:var(--blu);background:var(--bludim)}
+.op-btn.ac-u{color:var(--amb);border-bottom-color:var(--amb);background:var(--ambdim)}
+.op-btn.ac-d{color:var(--red);border-bottom-color:var(--red);background:var(--reddim)}
+.op-btn.ac-c .ob-icon{background:var(--grndim)}
+.op-btn.ac-r .ob-icon{background:var(--bludim)}
+.op-btn.ac-u .ob-icon{background:var(--ambdim)}
+.op-btn.ac-d .ob-icon{background:var(--reddim)}
+
+/* ── PANELS ── */
+.panel-wrap{padding:26px 24px 32px}
+.panel{display:none}
+.panel.vis{display:block}
+
+.welcome{text-align:center;padding:50px 0;color:var(--dim)}
+.welcome .wi{font-size:38px;margin-bottom:10px}
+.welcome p{font-size:12px;font-weight:300}
+
+/* panel header */
+.ph{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+.pbadge{font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;letter-spacing:.06em}
+.pb-c{background:var(--grndim);color:var(--grn)}
+.pb-r{background:var(--bludim);color:var(--blu)}
+.pb-u{background:var(--ambdim);color:var(--amb)}
+.pb-d{background:var(--reddim);color:var(--red)}
+.ph-title{font-size:16px;font-weight:600}
+
+/* danger */
+.danger{background:var(--reddim);border:1px solid rgba(231,76,60,.2);
+  border-radius:6px;padding:11px 14px;font-size:11px;color:#E74C3CAA;
+  line-height:1.65;margin-bottom:18px}
+
+/* fields */
+.field{margin-bottom:15px}
+.field label{display:block;font-size:10.5px;color:var(--muted);margin-bottom:5px}
+input[type=text],textarea{
+  width:100%;background:var(--s2);border:1px solid var(--bdr2);
+  color:var(--txt);font-family:var(--mono);font-size:12.5px;
+  padding:9px 12px;border-radius:6px;outline:none;transition:border-color .15s}
+input:focus,textarea:focus{border-color:var(--grn)}
+textarea{min-height:90px;resize:vertical;line-height:1.65}
+
+/* radio */
+.rrow{display:flex;gap:18px;margin-top:3px}
+.ropt{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);cursor:pointer}
+.ropt input{display:none}
+.rdot{width:14px;height:14px;border:1.5px solid var(--bdr2);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;transition:border-color .15s;flex-shrink:0}
+.ropt input:checked+.rdot{border-color:var(--amb)}
+.ropt input:checked+.rdot::after{content:'';width:6px;height:6px;background:var(--amb);border-radius:50%}
+.ropt input:checked~.rl{color:var(--txt)}
+
+/* action buttons */
+.act{font-family:var(--mono);font-size:12.5px;font-weight:600;
+  padding:9px 24px;border-radius:6px;border:none;cursor:pointer;transition:opacity .15s,transform .1s}
+.act:hover{opacity:.82}
+.act:active{transform:scale(.98)}
+.a-g{background:var(--grn);color:#050F08}
+.a-b{background:var(--blu);color:#030810}
+.a-a{background:var(--amb);color:#0E0800}
+.a-r{background:var(--red);color:#fff}
+
+/* output */
+.out{margin-top:20px;display:none;border-radius:8px;overflow:hidden;border:1px solid var(--bdr2)}
+.out.vis{display:block}
+.out-hd{background:var(--s2);padding:7px 14px;font-size:10px;color:var(--muted);
+  display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--bdr)}
+.pls{width:7px;height:7px;border-radius:50%;animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+.out-body{background:var(--bg);padding:14px 16px;font-size:12px;line-height:1.85;white-space:pre-wrap;min-height:60px}
+
+/* ── FILE SHELF ── */
+.shelf{margin-top:24px;border-top:1px solid var(--bdr);padding-top:18px}
+.shelf-lbl{font-size:9.5px;color:var(--dim);letter-spacing:.1em;margin-bottom:10px}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{display:flex;align-items:center;gap:5px;padding:5px 12px;
+  background:var(--s2);border:1px solid var(--bdr2);border-radius:20px;
+  font-size:11px;color:var(--muted);cursor:pointer;transition:border-color .15s,color .15s}
+.chip:hover{border-color:var(--grn);color:var(--txt)}
+.chip-dot{color:var(--grn);font-size:9px}
+.no-files{font-size:11px;color:var(--dim);font-style:italic}
+
+/* ── ACTIVITY LOG ── */
+.log-section{border-top:1px solid var(--bdr);background:var(--s1)}
+.log-head{padding:12px 24px 8px;font-size:9.5px;font-weight:600;
+  color:var(--dim);letter-spacing:.1em;display:flex;align-items:center;gap:8px;
+  border-bottom:1px solid var(--bdr)}
+.log-entries{padding:6px 0;max-height:160px;overflow-y:auto}
+.le{display:flex;gap:10px;padding:8px 24px;border-bottom:1px solid var(--bdr)}
+.le:last-child{border-bottom:none}
+.le-ico{font-size:11px;flex-shrink:0;margin-top:1px}
+.le-msg{font-size:11px;color:var(--txt);line-height:1.5}
+.le-time{font-size:9.5px;color:var(--dim);margin-top:1px}
+.log-empty{padding:14px 24px;font-size:11px;color:var(--dim);font-style:italic}
+
+/* ── FOOTER ── */
+.foot{background:var(--s1);border-top:1px solid var(--bdr);
+  padding:10px 24px;display:flex;align-items:center;gap:12px;font-size:10px;color:var(--muted)}
+.fdot{width:6px;height:6px;border-radius:50%;background:var(--grn);animation:pulse 2s ease-in-out infinite;flex-shrink:0}
+.fright{margin-left:auto;color:var(--dim)}
+
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:3px}
+@media(prefers-reduced-motion:reduce){.cur,.pls,.fdot{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- TITLEBAR -->
+<header class="tbar">
+  <div class="dots">
+    <div class="dot dr"></div>
+    <div class="dot dy"></div>
+    <div class="dot dg"></div>
+  </div>
+  <span class="tbar-path">fileops — <b>~/workspace</b></span>
+  <div class="tbar-right">
+    <span class="pill">Python 3.x</span>
+    <span class="pill">os module</span>
+    <span class="pill pill-live">● live</span>
+  </div>
+</header>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="prompt"><span class="sym">❯</span> atharv@fileops:~$</div>
+  <h1 class="hero-h">File<span class="acc">Ops</span><span class="cur"></span></h1>
+  <p class="hero-sub">A Python-powered CRUD file manager — create, read, update &amp; delete files with a clean terminal interface.</p>
+</div>
+
+<!-- STATS -->
+<div class="stats">
+  <div class="stat"><div class="sv cg" id="sc-c">0</div><div class="sl">created</div></div>
+  <div class="stat"><div class="sv cb" id="sc-r">0</div><div class="sl">reads</div></div>
+  <div class="stat"><div class="sv ca" id="sc-u">0</div><div class="sl">updated</div></div>
+  <div class="stat"><div class="sv cr" id="sc-d">0</div><div class="sl">deleted</div></div>
+</div>
+
+<!-- OP SELECTOR -->
+<nav class="op-row">
+  <button class="op-btn" id="ob-c" onclick="sel('c')">
+    <span class="ob-icon cg">+</span>Create
+  </button>
+  <button class="op-btn" id="ob-r" onclick="sel('r')">
+    <span class="ob-icon cb">⊞</span>Read
+  </button>
+  <button class="op-btn" id="ob-u" onclick="sel('u')">
+    <span class="ob-icon ca">✎</span>Update
+  </button>
+  <button class="op-btn" id="ob-d" onclick="sel('d')">
+    <span class="ob-icon cr">⊘</span>Delete
+  </button>
+</nav>
+
+<!-- PANELS -->
+<div class="panel-wrap">
+
+  <div class="panel vis" id="pw">
+    <div class="welcome">
+      <div class="wi">📂</div>
+      <p>Pick an operation above to get started.</p>
+    </div>
+  </div>
+
+  <!-- CREATE -->
+  <div class="panel" id="fp-c">
+    <div class="ph">
+      <span class="pbadge pb-c">CREATE</span>
+      <span class="ph-title">New File</span>
+    </div>
+    <div class="field">
+      <label>File name — include extension (e.g. notes.txt)</label>
+      <input type="text" id="in-c" placeholder="report.txt"/>
+    </div>
+    <button class="act a-g" onclick="doCreate()">Create File</button>
+    <div class="out" id="out-c">
+      <div class="out-hd"><div class="pls" style="background:var(--grn)"></div>stdout</div>
+      <div class="out-body cg" id="ot-c"></div>
+    </div>
+    <div id="shelf-c"></div>
+  </div>
+
+  <!-- READ -->
+  <div class="panel" id="fp-r">
+    <div class="ph">
+      <span class="pbadge pb-r">READ</span>
+      <span class="ph-title">Open File</span>
+    </div>
+    <div class="field">
+      <label>File name</label>
+      <input type="text" id="in-r" placeholder="report.txt"/>
+    </div>
+    <button class="act a-b" onclick="doRead()">Read File</button>
+    <div class="out" id="out-r">
+      <div class="out-hd"><div class="pls" style="background:var(--blu)"></div>file contents</div>
+      <div class="out-body cb" id="ot-r"></div>
+    </div>
+  </div>
+
+  <!-- UPDATE -->
+  <div class="panel" id="fp-u">
+    <div class="ph">
+      <span class="pbadge pb-u">UPDATE</span>
+      <span class="ph-title">Edit File</span>
+    </div>
+    <div class="field">
+      <label>File name</label>
+      <input type="text" id="in-u" placeholder="report.txt"/>
+    </div>
+    <div class="field">
+      <label>Write mode</label>
+      <div class="rrow">
+        <label class="ropt"><input type="radio" name="wm" value="w" checked/><span class="rdot"></span><span class="rl">Overwrite</span></label>
+        <label class="ropt"><input type="radio" name="wm" value="a"/><span class="rdot"></span><span class="rl">Append</span></label>
+      </div>
+    </div>
+    <div class="field">
+      <label>Content</label>
+      <textarea id="in-uc" placeholder="Write your content here…"></textarea>
+    </div>
+    <button class="act a-a" onclick="doUpdate()">Save Changes</button>
+    <div class="out" id="out-u">
+      <div class="out-hd"><div class="pls" style="background:var(--amb)"></div>stdout</div>
+      <div class="out-body ca" id="ot-u"></div>
+    </div>
+  </div>
+
+  <!-- DELETE -->
+  <div class="panel" id="fp-d">
+    <div class="ph">
+      <span class="pbadge pb-d">DELETE</span>
+      <span class="ph-title">Remove File</span>
+    </div>
+    <div class="danger">⚠ Permanent action — this file will be removed from the virtual workspace and cannot be recovered.</div>
+    <div class="field">
+      <label>File name — include extension</label>
+      <input type="text" id="in-d" placeholder="report.txt"/>
+    </div>
+    <button class="act a-r" onclick="doDelete()">Delete File</button>
+    <div class="out" id="out-d">
+      <div class="out-hd"><div class="pls" style="background:var(--red)"></div>stdout</div>
+      <div class="out-body cr" id="ot-d"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ACTIVITY LOG -->
+<div class="log-section">
+  <div class="log-head"><div class="pls" style="background:var(--muted)"></div>ACTIVITY LOG</div>
+  <div class="log-entries" id="log-entries">
+    <div class="log-empty" id="log-empty">No activity yet.</div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer class="foot">
+  <div class="fdot"></div>
+  <span>virtual fs — <span class="cg" id="fc">0 files</span></span>
+  <span id="fnames" style="color:var(--dim)"></span>
+  <span class="fright">built by atharv · python file manager</span>
+</footer>
+
+</div><!-- /wrap -->
+
+<script>
+const vfs={}, st={c:0,r:0,u:0,d:0};
+
+function ts(){return new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+
+function tick(){
+  ['c','r','u','d'].forEach(k=>document.getElementById('sc-'+k).textContent=st[k]);
+  const ns=Object.keys(vfs);
+  document.getElementById('fc').textContent=ns.length+(ns.length===1?' file':' files');
+  document.getElementById('fnames').textContent=ns.slice(0,5).join('  ·  ')+(ns.length>5?'  …':'');
+  updateShelf();
+}
+
+function updateShelf(){
+  const el=document.getElementById('shelf-c');
+  if(!el)return;
+  const ns=Object.keys(vfs);
+  if(!ns.length){el.innerHTML='';return;}
+  el.innerHTML=`<div class="shelf"><div class="shelf-lbl">WORKSPACE FILES</div>
+    <div class="chips">${ns.map(n=>`<div class="chip" onclick="qRead('${n}')"><span class="chip-dot">▸</span>${n}</div>`).join('')}</div></div>`;
+}
+
+function log(icon,msg){
+  const c=document.getElementById('log-entries');
+  const emp=document.getElementById('log-empty');
+  if(emp)emp.remove();
+  const d=document.createElement('div');
+  d.className='le';
+  d.innerHTML=`<span class="le-ico">${icon}</span><div><div class="le-msg">${msg}</div><div class="le-time">${ts()}</div></div>`;
+  c.prepend(d);
+}
+
+function showOut(id,txt,cls){
+  const b=document.getElementById('out-'+id);
+  const t=document.getElementById('ot-'+id);
+  b.classList.add('vis');
+  t.className='out-body '+cls;
+  t.textContent=txt;
+}
+
+const OPS=['c','r','u','d'];
+const AC={c:'ac-c',r:'ac-r',u:'ac-u',d:'ac-d'};
+
+function sel(op){
+  OPS.forEach(o=>{
+    document.getElementById('ob-'+o).className='op-btn';
+    document.getElementById('fp-'+o).classList.remove('vis');
+  });
+  document.getElementById('pw').classList.remove('vis');
+  document.getElementById('ob-'+op).classList.add(AC[op]);
+  document.getElementById('fp-'+op).classList.add('vis');
+}
+
+function qRead(n){sel('r');document.getElementById('in-r').value=n;doRead();}
+
+function doCreate(){
+  const n=document.getElementById('in-c').value.trim();
+  if(!n)return showOut('c','✗  ValueError: file name cannot be empty.','cr');
+  if(vfs.hasOwnProperty(n)){showOut('c',`✗  FileExistsError: '${n}' already exists.`,'cr');log('🔴',`Create failed — '${n}' exists`);return;}
+  vfs[n]='';st.c++;tick();
+  showOut('c',`✓  open('${n}', 'x')  →  exclusive creation\n   Status : File created successfully\n   Size   : 0 bytes`,'cg');
+  log('🟢',`Created '${n}'`);
+  document.getElementById('in-c').value='';
+}
+
+function doRead(){
+  const n=document.getElementById('in-r').value.trim();
+  if(!n)return showOut('r','✗  ValueError: file name cannot be empty.','cr');
+  if(!vfs.hasOwnProperty(n)){showOut('r',`✗  FileNotFoundError: '${n}' not found.`,'cr');log('🔴',`Read failed — '${n}' not found`);return;}
+  st.r++;tick();
+  showOut('r',vfs[n]||'(file is empty)','cb');
+  log('🔵',`Read '${n}'`);
+}
+
+function doUpdate(){
+  const n=document.getElementById('in-u').value.trim();
+  const ct=document.getElementById('in-uc').value;
+  const m=document.querySelector('input[name="wm"]:checked').value;
+  if(!n)return showOut('u','✗  ValueError: file name cannot be empty.','cr');
+  if(!vfs.hasOwnProperty(n)){showOut('u',`✗  FileNotFoundError: '${n}' not found.`,'cr');log('🔴',`Update failed — '${n}' not found`);return;}
+  vfs[n]=m==='w'?ct:vfs[n]+ct;st.u++;tick();
+  const b=new TextEncoder().encode(vfs[n]).length;
+  showOut('u',`✓  open('${n}', '${m}')  →  ${m==='w'?'overwrite':'append'}\n   Status : Changes saved successfully\n   Size   : ${b} bytes`,'ca');
+  log('🟡',`Updated '${n}' (${m==='w'?'overwrite':'append'}, ${b}B)`);
+  document.getElementById('in-uc').value='';
+}
+
+function doDelete(){
+  const n=document.getElementById('in-d').value.trim();
+  if(!n)return showOut('d','✗  ValueError: file name cannot be empty.','cr');
+  if(!vfs.hasOwnProperty(n)){showOut('d',`✗  FileNotFoundError: '${n}' not found.`,'cr');log('🔴',`Delete failed — '${n}' not found`);return;}
+  delete vfs[n];st.d++;tick();
+  showOut('d',`✓  os.remove('${n}')  →  completed\n   Status : File permanently removed`,'cr');
+  log('🔴',`Deleted '${n}'`);
+  document.getElementById('in-d').value='';
+}
+
+tick();
+
+// ── Demo: pre-populate with sample data so the app looks alive ──
+(function demoSeed(){
+  // seed files
+  vfs['notes.txt']    = 'Meeting notes — Oct 20\n\nDiscussed Q4 roadmap.\nAssigned tasks to team.\nNext sync: Friday 10am.';
+  vfs['config.json']  = '{\n  "version": "1.0.0",\n  "debug": false,\n  "output": "./dist"\n}';
+  vfs['readme.md']    = '# FileOps\nA Python CRUD file manager.\n\n## Usage\nRun main.py and follow the prompts.';
+  vfs['data.csv']     = 'id,name,score\n1,Alice,98\n2,Bob,87\n3,Carol,95';
+
+  st.c = 4; st.r = 3; st.u = 2; st.d = 1;
+  tick();
+
+  // show Create panel with a success output
+  sel('c');
+  showOut('c',
+    "✓  open('notes.txt', 'x')  →  exclusive creation\n" +
+    "   Status : File created successfully\n" +
+    "   Size   : 0 bytes", 'cg');
+  document.getElementById('out-c').classList.add('vis');
+
+  // seed activity log
+  const entries = [
+    ['🟢', "Created 'data.csv'",          '10:42:31'],
+    ['🟡', "Updated 'config.json' (overwrite, 68B)", '10:41:18'],
+    ['🔵', "Read 'readme.md'",             '10:40:55'],
+    ['🔵', "Read 'notes.txt'",             '10:40:22'],
+    ['🔴', "Deleted 'old_log.txt'",        '10:39:47'],
+    ['🟢', "Created 'readme.md'",          '10:39:10'],
+    ['🟢', "Created 'config.json'",        '10:38:55'],
+    ['🟢', "Created 'notes.txt'",          '10:38:30'],
+  ];
+  const c = document.getElementById('log-entries');
+  const emp = document.getElementById('log-empty');
+  if(emp) emp.remove();
+  entries.forEach(([icon, msg, time]) => {
+    const d = document.createElement('div');
+    d.className = 'le';
+    d.innerHTML = `<span class="le-ico">${icon}</span>
+      <div><div class="le-msg">${msg}</div><div class="le-time">${time}</div></div>`;
+    c.appendChild(d);
+  });
+})();
+</script>
+</body>
+</html>
